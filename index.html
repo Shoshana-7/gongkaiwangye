@@ -1,24 +1,102 @@
 <!DOCTYPE html>
-<!-- saved from url=(0022)http://127.0.0.1:5000/ -->
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>人因工程作业交互页</title>
+<html>
+<head>
+    <title>带人工智能的交互页</title>
     <style>
-        body { max-width: 800px; margin: 0 auto; padding: 20px; font-family: Arial; }
-        .msg { background: #f0f0f0; padding: 10px; margin: 5px 0; border-radius: 5px; }
-        form { margin-top: 20px; }
-        input { padding: 8px; margin-right: 5px; }
-        button { padding: 8px 15px; background: #4CAF50; color: white; border: none; border-radius: 3px; }
+        body { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            font-family: Arial, sans-serif; 
+        }
+        h1 { text-align: center; }
+        .form-group { margin-bottom: 20px; }
+        input, button { padding: 8px; }
+
+        /* AI 对话样式 */
+        .ai-chat { margin-top: 40px; }
+        .chat-messages { 
+            height: 300px; 
+            overflow-y: auto; 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            margin-bottom: 10px; 
+        }
+        .message { margin-bottom: 10px; }
+        .user { text-align: right; color: #333; }
+        .assistant { text-align: left; color: #666; background-color: #f5f5f5; padding: 5px 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
     <h1>欢迎使用交互页！</h1>
-    <!-- 这里用  作为消息占位符 -->
-    <div></div>
+    <div class="form-group">
+        <input type="text" id="name" placeholder="你的名字">
+        <input type="text" id="content" placeholder="输入内容...">
+        <button onclick="submitForm()">提交</button>
+    </div>
 
-    <form method="POST">
-        <input type="text" name="name" placeholder="你的名字">
-        <input type="text" name="message" placeholder="输入内容...">
-        <button type="submit">提交</button>
-    </form>
+    <!-- AI 对话区域 -->
+    <div class="ai-chat">
+        <h2>人工智能助手</h2>
+        <div class="chat-messages" id="chatMessages"></div>
+        <input type="text" id="userInput" placeholder="请输入问题...">
+        <button onclick="sendMessage()">发送</button>
+    </div>
 
-<script src="chrome-extension://dcjgmlhjjpdmnnmodmcddlbhoeclbgcn/static/js/inject.js" type="text/javascript" async=""></script></body></html>
+    <script>
+        // 原有提交逻辑（可保留）
+        function submitForm() {
+            const name = document.getElementById('name').value;
+            const content = document.getElementById('content').value;
+            alert(`提交成功！姓名：${name || '匿名'}，内容：${content}`);
+        }
+
+        // AI 对话逻辑
+        const apiKey = '你的OpenAI_API密钥'; // 替换为你自己的API密钥
+        const chatHistory = [];
+
+        function sendMessage() {
+            const input = document.getElementById('userInput').value.trim();
+            if (!input) return;
+
+            // 显示用户消息
+            addMessage('user', input);
+            document.getElementById('userInput').value = '';
+
+            // 调用OpenAI API
+            fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-3.5-turbo',
+                    messages: [...chatHistory, { role: 'user', content: input }]
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const aiResponse = data.choices[0].message.content;
+                addMessage('assistant', aiResponse);
+                chatHistory.push({ role: 'assistant', content: aiResponse });
+            })
+            .catch(error => {
+                console.error('AI 接口调用失败:', error);
+                addMessage('assistant', '抱歉，我现在有点忙，请稍后再试~');
+            });
+
+            chatHistory.push({ role: 'user', content: input });
+        }
+
+        function addMessage(role, content) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.textContent = content;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight; // 滚动到底部
+        }
+    </script>
+</body>
+</html>
