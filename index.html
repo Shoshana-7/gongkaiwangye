@@ -1,101 +1,112 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>带人工智能的交互页</title>
+    <title>我的网页+AI助手</title>
     <style>
         body { 
             max-width: 800px; 
             margin: 0 auto; 
             padding: 20px; 
-            font-family: Arial, sans-serif; 
+            font-family: Arial; 
         }
-        h1 { text-align: center; }
-        .form-group { margin-bottom: 20px; }
-        input, button { padding: 8px; }
-
-        /* AI 对话样式 */
-        .ai-chat { margin-top: 40px; }
+        .ai-chat { 
+            margin-top: 30px; 
+            border: 1px solid #ddd; 
+            padding: 20px; 
+            border-radius: 10px; 
+        }
         .chat-messages { 
             height: 300px; 
             overflow-y: auto; 
-            border: 1px solid #ddd; 
+            margin: 10px 0; 
             padding: 10px; 
-            margin-bottom: 10px; 
+            background: #f9f9f9; 
+            border-radius: 5px; 
         }
-        .message { margin-bottom: 10px; }
-        .user { text-align: right; color: #333; }
-        .assistant { text-align: left; color: #666; background-color: #f5f5f5; padding: 5px 10px; border-radius: 5px; }
+        .message { 
+            margin: 5px 0; 
+            padding: 8px; 
+            border-radius: 4px; 
+        }
+        .user { 
+            background: #e1f5fe; 
+            text-align: right; 
+        }
+        .assistant { 
+            background: #f1f8e9; 
+            text-align: left; 
+        }
+        input { 
+            width: 70%; 
+            padding: 8px; 
+            margin-right: 10px; 
+        }
+        button { 
+            padding: 8px 15px; 
+            background: #4CAF50; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+        }
     </style>
 </head>
 <body>
-    <h1>欢迎使用交互页！</h1>
-    <div class="form-group">
-        <input type="text" id="name" placeholder="你的名字">
-        <input type="text" id="content" placeholder="输入内容...">
-        <button onclick="submitForm()">提交</button>
-    </div>
-
-    <!-- AI 对话区域 -->
+    <h1>我的互动网页</h1>
+    
+    <!-- AI对话区域 -->
     <div class="ai-chat">
-        <h2>人工智能助手</h2>
+        <h3>AI助手</h3>
         <div class="chat-messages" id="chatMessages"></div>
-        <input type="text" id="userInput" placeholder="请输入问题...">
+        <input type="text" id="userInput" placeholder="输入你的问题...">
         <button onclick="sendMessage()">发送</button>
     </div>
 
     <script>
-        // 原有提交逻辑（可保留）
-        function submitForm() {
-            const name = document.getElementById('name').value;
-            const content = document.getElementById('content').value;
-            alert(`提交成功！姓名：${name || '匿名'}，内容：${content}`);
-        }
+        // 存储对话历史
+        let chatHistory = [];
+        // 替换为你的腾讯云函数URL
+        const backendUrl = "https://1383277634-40di13uge2.ap-beijing.tencentscf.com";
 
-        // AI 对话逻辑
-        const apiKey = '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'; // 替换为你自己的API密钥
-        const chatHistory = [];
-
+        // 发送消息给AI
         function sendMessage() {
             const input = document.getElementById('userInput').value.trim();
-            if (!input) return;
+            if (!input) return; // 空消息不发送
 
-            // 显示用户消息
-            addMessage('user', input);
-            document.getElementById('userInput').value = '';
+            // 显示用户的消息
+            addMessage("user", input);
+            document.getElementById('userInput').value = ""; // 清空输入框
 
-            // 调用OpenAI API
-            fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: 'gpt-3.5-turbo',
-                    messages: [...chatHistory, { role: 'user', content: input }]
-                })
+            // 把用户消息加入历史
+            chatHistory.push({ role: "user", content: input });
+
+            // 调用后端接口，获取AI回答
+            fetch(backendUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ messages: chatHistory })
             })
             .then(response => response.json())
             .then(data => {
-                const aiResponse = data.choices[0].message.content;
-                addMessage('assistant', aiResponse);
-                chatHistory.push({ role: 'assistant', content: aiResponse });
+                // 显示AI的回答
+                addMessage("assistant", data.content);
+                // 把AI回答加入历史
+                chatHistory.push({ role: "assistant", content: data.content });
             })
             .catch(error => {
-                console.error('AI 接口调用失败:', error);
-                addMessage('assistant', '抱歉，我现在有点忙，请稍后再试~');
+                addMessage("assistant", "抱歉，暂时无法回答~");
             });
-
-            chatHistory.push({ role: 'user', content: input });
         }
 
+        // 在页面上显示消息
         function addMessage(role, content) {
-            const messagesDiv = document.getElementById('chatMessages');
+            const chatDiv = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
             messageDiv.textContent = content;
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight; // 滚动到底部
+            chatDiv.appendChild(messageDiv);
+            // 自动滚动到底部
+            chatDiv.scrollTop = chatDiv.scrollHeight;
         }
     </script>
 </body>
