@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>兰宇昕的网页</title>
+    <title>兰宇昕的网页 - 瓶颈工序分析</title>
     <style>
         .chat-container {
             width: 600px;
@@ -20,14 +20,18 @@
             margin-bottom: 10px;
             padding: 8px;
             border-radius: 5px;
+            max-width: 80%;
+            word-wrap: break-word;
         }
         .user {
             background-color: #e6f7ff;
             text-align: right;
+            margin-left: auto;
         }
         .assistant {
             background-color: #f5f5f5;
             text-align: left;
+            margin-right: auto;
         }
         .chat-input {
             display: flex;
@@ -38,6 +42,7 @@
             padding: 10px;
             border: none;
             outline: none;
+            border-right: 1px solid #ccc;
         }
         #send {
             padding: 0 20px;
@@ -46,13 +51,29 @@
             border: none;
             cursor: pointer;
         }
+        #send:hover {
+            background-color: #0056b3;
+        }
+        .tip {
+            font-size: 12px;
+            color: #666;
+            padding: 5px 10px;
+            background-color: #fafafa;
+            border-bottom: 1px solid #eee;
+        }
     </style>
 </head>
 <body>
     <div class="chat-container">
+        <!-- 提示用户输入格式 -->
+        <div class="tip">
+            请按格式输入工序信息（输入“开始分析”触发计算）：<br>
+            格式示例：工序名,耗时(分钟),前置工序1,前置工序2（无前置工序则留空）<br>
+            例如：注塑灯座,5；焊接线路,8,注塑灯座；组装灯杆,6,注塑灯座
+        </div>
         <div class="chat-messages" id="messages"></div>
         <div class="chat-input">
-            <input type="text" id="input" placeholder="请输入消息...">
+            <input type="text" id="input" placeholder="按格式输入工序，输入“开始分析”计算瓶颈...">
             <button id="send">发送</button>
         </div>
     </div>
@@ -61,44 +82,182 @@
         const messagesContainer = document.getElementById('messages');
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('send');
+        // 存储用户输入的工序数据
+        let processes = {};
+
+        // ---------------------- 核心：瓶颈工序分析算法 ----------------------
+        // 检查循环依赖
+        function checkCircularDependency(processes) {
+            const visited = new Set();
+            const recStack = new Set();
+
+            function dfs(process) {
+                if (recStack.has(process)) return true;
+                if (visited.has(process)) return false;
+                visited.add(process);
+                recStack.add(process);
+                const [_, predecessors] = processes[process] || [0, []];
+                for (const prev of predecessors) {
+                    if (dfs(prev)) return true;
+                }
+                recStack.delete(process);
+                return false;
+            }
+
+            for (const process of Object.keys(processes)) {
+                if (dfs(process)) return true;
+            }
+            return false;
+        }
+
+        // 查找瓶颈工序
+        function findBottleneck(processes) {
+            // 1. 拓扑排序
+            const sortedProcesses = [];
+            const visited = new Set();
+
+            function dfs(process) {
+                if (visited.has(process)) return;
+                const [_, predecessors] = processes[process] || [0, []];
+                for (const prev of predecessors) {
+                    dfs(prev);
+                }
+                visited.add(process);
+                sortedProcesses.push(process);
+            }
+
+            for (const process of Object.keys(processes)) {
+                dfs(process);
+            }
+
+            // 2. 计算最早开始/完成时间
+            const es = {}; // 最早开始时间
+            const ef = {}; // 最早完成时间
+            Object.keys(processes).forEach(p => es[p] = 0);
+
+            for (const p of sortedProcesses) {
+                const [duration, predecessors] = processes[p];
+                if (predecessors.length === 0) {
+                    ef[p] = duration;
+                } else {
+                    es[p] = Math.max(...predecessors.map(prev => ef[prev]));
+                    ef[p] = es[p] + duration;
+                }
+            }
+
+            // 3. 计算最晚完成/开始时间
+            const totalTime = Math.max(...Object.values(ef));
+            const lf = {}; // 最晚完成时间
+            const ls = {}; // 最晚开始时间
+            Object.keys(processes).forEach(p => lf[p] = totalTime);
+
+            for (const p of sortedProcesses.reverse()) {
+                const [duration, _] = processes[p];
+                // 找后序工序
+                const successors = Object.keys(processes).filter(
+                    s => processes[s][1].includes(p)
+                );
+
+                if (successors.length === 0) {
+                    ls[p] = lf[p] - duration;
+                } else {
+                    lf[p] = Math.min(...successors.map(s => ls[s]));
+                    ls[p] = lf[p] - duration;
+                }
+            }
+
+            // 4. 确定关键路径和瓶颈
+            const criticalPath = Object.keys(processes).filter(p => es[p] === ls[p]);
+            if (criticalPath.length === 0) return null;
+
+            // 关键路径中耗时最长的工序
+            const bottleneck = criticalPath.reduce((maxP, p) => {
+                return processes[p][0] > processes[maxP][0] ? p : maxP;
+            }, criticalPath[0]);
+
+            return {
+                totalTime: totalTime.toFixed(1),
+                criticalPath: criticalPath.join(' → '),
+                bottleneck: bottleneck,
+                bottleneckTime: processes[bottleneck][0].toFixed(1)
+            };
+        }
+        // -------------------------------------------------------------------
 
         // 发送消息函数
         function sendMessage(content) {
+            // 1. 显示用户消息
             const userMessage = document.createElement('div');
             userMessage.className = 'message user';
             userMessage.textContent = content;
             messagesContainer.appendChild(userMessage);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-            // 调用豆包API
-            fetch('https://open.doubao.com/openapi/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer fb5f572c-75ba-4009-a484-08241fd640b8'
-                },
-                body: JSON.stringify({
-                    model: 'doubao-pro',
-                    messages: [{ role: 'user', content: content }]
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
+            // 2. 处理用户输入（区分“添加工序”和“开始分析”）
+            let assistantReply = '';
+            if (content.trim() === '开始分析') {
+                // 触发分析逻辑
+                if (Object.keys(processes).length === 0) {
+                    assistantReply = '还没有输入任何工序哦！请先按格式输入至少一个工序（例如：注塑灯座,5）。';
+                } else if (checkCircularDependency(processes)) {
+                    assistantReply = '发现工序存在循环依赖（比如A依赖B，B又依赖A），请修正工序关系后重新分析！';
+                } else {
+                    const result = findBottleneck(processes);
+                    if (result) {
+                        assistantReply = `
+                        🔍 瓶颈工序分析结果：
+                        1. 总生产时间：${result.totalTime} 分钟
+                        2. 关键路径（最长生产路径）：${result.criticalPath}
+                        3. 瓶颈工序：${result.bottleneck}
+                        4. 瓶颈耗时：${result.bottleneckTime} 分钟
+                        💡 建议：优先优化瓶颈工序（如增加设备/人员），可提升整体产能。
+                        `;
+                        // 分析后清空工序数据，方便重新输入
+                        processes = {};
+                    } else {
+                        assistantReply = '分析失败，请检查工序输入格式是否正确！';
+                    }
+                }
+            } else {
+                // 解析用户输入的工序（格式：工序名,耗时,前置1,前置2）
+                const parts = content.trim().split(',').map(item => item.trim());
+                if (parts.length < 2) {
+                    assistantReply = '输入格式不对哦！正确格式：工序名,耗时（例如：注塑灯座,5），有前置工序可加在后面（例如：焊接线路,8,注塑灯座）。';
+                } else {
+                    const processName = parts[0];
+                    const duration = parseFloat(parts[1]);
+                    const predecessors = parts.slice(2).filter(p => p); // 过滤空前置工序
+
+                    // 验证耗时是否为正数
+                    if (isNaN(duration) || duration <= 0) {
+                        assistantReply = `“${processName}”的耗时必须是正数，请重新输入！`;
+                    } else {
+                        // 验证前置工序是否已存在
+                        const invalidPre = predecessors.filter(p => !processes[p]);
+                        if (invalidPre.length > 0) {
+                            assistantReply = `“${processName}”的前置工序${invalidPre.join('、')}还没添加，请先添加这些工序！`;
+                        } else {
+                            // 保存工序
+                            processes[processName] = [duration, predecessors];
+                            assistantReply = `✅ 已添加工序：
+                            名称：${processName}
+                            耗时：${duration} 分钟
+                            前置工序：${predecessors.length > 0 ? predecessors.join('、') : '无'}
+                            （可继续添加其他工序，输入“开始分析”获取结果）`;
+                        }
+                    }
+                }
+            }
+
+            // 3. 显示助手回复
+            setTimeout(() => { // 加一点延迟，模拟“思考”过程，更自然
                 const assistantMessage = document.createElement('div');
                 assistantMessage.className = 'message assistant';
-                assistantMessage.textContent = data.choices[0].message.content;
+                // 替换换行符为<br>，让回复格式更清晰
+                assistantMessage.innerHTML = assistantReply.replace(/\n/g, '<br>');
                 messagesContainer.appendChild(assistantMessage);
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            })
-            .catch(error => {
-                console.error('请求错误:', error);
-                const errorMessage = document.createElement('div');
-                errorMessage.className = 'message assistant';
-                errorMessage.style.color = 'red';
-                errorMessage.textContent = '请求失败，请稍后再试';
-                messagesContainer.appendChild(errorMessage);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            });
+            }, 300);
         }
 
         // 绑定发送事件
@@ -116,6 +275,14 @@
                 input.value = '';
             }
         });
+
+        // 页面加载时发送欢迎消息
+        window.onload = () => {
+            const welcomeMsg = document.createElement('div');
+            welcomeMsg.className = 'message assistant';
+            welcomeMsg.innerHTML = '你好！我可以帮你分析台灯生产的瓶颈工序～<br>请按提示格式输入工序，全部输入后敲“开始分析”即可。';
+            messagesContainer.appendChild(welcomeMsg);
+        };
     </script>
 </body>
 </html>
