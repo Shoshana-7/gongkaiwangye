@@ -74,14 +74,14 @@
     <div class="chat-container">
         <div class="tip">
             请逐条输入工序信息（每条工序单独发送），格式：<br>
-            工序名称,工序时间,前置工序1,前置工序2,...（无前置工序则留空，用英文逗号分隔）<br>
-            示例1（无前置）：注塑灯座,5<br>
-            示例2（有前置）：焊接线路,8,注塑灯座<br>
+            工序名称,工序时间(秒),前置工序1,前置工序2,...（无前置工序则留空，用英文逗号分隔）<br>
+            示例1（无前置）：注塑灯座,300<br>
+            示例2（有前置）：焊接线路,480,注塑灯座<br>
             所有工序输入完成后，发送“开始分析”即可。
         </div>
         <div class="chat-messages" id="messages"></div>
         <div class="chat-input">
-            <input type="text" id="input" placeholder="按格式输入单条工序，完成后发送“开始分析”...">
+            <input type="text" id="input" placeholder="按格式输入单条工序（时间单位：秒），完成后发送“开始分析”...">
             <button id="send">发送</button>
         </div>
     </div>
@@ -90,7 +90,7 @@
         const messagesContainer = document.getElementById('messages');
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('send');
-        let processes = {}; // 存储所有工序：{名称: [时间, [前置工序1, 前置工序2...]]}
+        let processes = {}; // 存储所有工序：{名称: [时间(秒), [前置工序1, 前置工序2...]]}
 
         // 显示消息
         function showMessage(content, isUser = false) {
@@ -106,7 +106,7 @@
             if (Object.keys(processes).length === 0) return '';
             let list = '<div class="process-list">已添加工序：<br>';
             Object.entries(processes).forEach(([name, [time, pres]]) => {
-                list += `- ${name}（耗时${time}分钟，前置：${pres.length > 0 ? pres.join('、') : '无'}）<br>`;
+                list += `- ${name}（耗时${time}秒，前置：${pres.length > 0 ? pres.join('、') : '无'}）<br>`;
             });
             list += '</div>';
             return list;
@@ -228,10 +228,10 @@
                 if (result) {
                     showMessage(`
                     🔍 瓶颈工序分析结果：<br>
-                    1. 总生产时间：${result.totalTime} 分钟<br>
+                    1. 总生产时间：${result.totalTime} 秒<br>
                     2. 关键路径（最长生产路径）：${result.criticalPath}<br>
                     3. 瓶颈工序：${result.bottleneck}<br>
-                    4. 瓶颈耗时：${result.bottleneckTime} 分钟<br>
+                    4. 瓶颈耗时：${result.bottleneckTime} 秒<br>
                     💡 建议：优先优化瓶颈工序以提升整体产能。
                     `);
                     // 分析后清空，方便重新输入
@@ -242,10 +242,10 @@
                 return;
             }
 
-            // 处理单条工序输入（格式：名称,时间,前置1,前置2,...）
+            // 处理单条工序输入（格式：名称,时间(秒),前置1,前置2,...）
             const parts = content.split(',').map(item => item.trim());
             if (parts.length < 2) {
-                showMessage('格式错误！正确格式：工序名称,工序时间,前置工序1,前置工序2...（最少需要名称和时间，用中文逗号分隔）');
+                showMessage('格式错误！正确格式：工序名称,工序时间(秒),前置工序1,前置工序2...（最少需要名称和时间，用中文逗号分隔）');
                 return;
             }
 
@@ -266,9 +266,9 @@
                 return;
             }
 
-            // 验证时间
+            // 验证时间（秒级，必须为正数）
             if (isNaN(time) || time <= 0) {
-                showMessage(`“${name}”的时间必须是正数，请重新输入。`);
+                showMessage(`“${name}”的时间必须是正数（单位：秒），请重新输入。`);
                 return;
             }
 
@@ -283,7 +283,7 @@
             processes[name] = [time, predecessors];
             showMessage(`✅ 已添加工序：<br>
             名称：${name}<br>
-            时间：${time} 分钟<br>
+            时间：${time} 秒<br>
             前置工序：${predecessors.length > 0 ? predecessors.join('、') : '无'}<br>
             ${showProcessList()}<br>
             可继续添加其他工序，完成后发送“开始分析”。`);
@@ -297,7 +297,7 @@
 
         // 初始化欢迎消息
         window.onload = () => {
-            showMessage('你好！请逐条输入生产工序，每条工序格式为：<br>工序名称,工序时间,前置工序1,前置工序2...<br>（无前置工序可留空，例如“注塑灯座,5,,,”）<br>所有工序输入完成后，发送“开始分析”即可得到结果。');
+            showMessage('你好！请逐条输入生产工序，每条工序格式为：<br>工序名称,工序时间(秒),前置工序1,前置工序2...<br>（无前置工序可留空，例如“注塑灯座,300”）<br>所有工序输入完成后，发送“开始分析”即可得到结果。');
         };
     </script>
 </body>
