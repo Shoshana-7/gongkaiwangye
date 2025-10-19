@@ -1,113 +1,121 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
+    <meta charset="UTF-8">
     <title>兰宇昕的网页</title>
     <style>
-        body { 
-            max-width: 800px; 
-            margin: 0 auto; 
-            padding: 20px; 
-            font-family: Arial; 
+        .chat-container {
+            width: 600px;
+            margin: 50px auto;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden;
         }
-        .ai-chat { 
-            margin-top: 30px; 
-            border: 1px solid #ddd; 
-            padding: 20px; 
-            border-radius: 10px; 
+        .chat-messages {
+            height: 400px;
+            padding: 10px;
+            overflow-y: auto;
         }
-        .chat-messages { 
-            height: 300px; 
-            overflow-y: auto; 
-            margin: 10px 0; 
-            padding: 10px; 
-            background: #f9f9f9; 
-            border-radius: 5px; 
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 5px;
         }
-        .message { 
-            margin: 5px 0; 
-            padding: 8px; 
-            border-radius: 4px; 
+        .user {
+            background-color: #e6f7ff;
+            text-align: right;
         }
-        .user { 
-            background: #e1f5fe; 
-            text-align: right; 
+        .assistant {
+            background-color: #f5f5f5;
+            text-align: left;
         }
-        .assistant { 
-            background: #f1f8e9; 
-            text-align: left; 
+        .chat-input {
+            display: flex;
+            border-top: 1px solid #ccc;
         }
-        input { 
-            width: 70%; 
-            padding: 8px; 
-            margin-right: 10px; 
+        #input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            outline: none;
         }
-        button { 
-            padding: 8px 15px; 
-            background: #4CAF50; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            cursor: pointer; 
+        #send {
+            padding: 0 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <h1>请给出各工序的数据</h1>
-    
-    <!-- AI对话区域 -->
-    <div class="ai-chat">
-        <h3>AI小助手</h3>
-        <div class="chat-messages" id="chatMessages"></div>
-        <input type="text" id="userInput" placeholder="请输入你的问题...">
-        <button onclick="sendMessage()">发送</button>
+    <div class="chat-container">
+        <div class="chat-messages" id="messages"></div>
+        <div class="chat-input">
+            <input type="text" id="input" placeholder="请输入消息...">
+            <button id="send">发送</button>
+        </div>
     </div>
 
     <script>
-        // 存储对话历史
-        let chatHistory = [];
-        // 替换为你的腾讯云函数URL
-        const backendUrl = "https://1383277634-5ic4c9jaoo.ap-beijing.tencentscf.com";
+        const messagesContainer = document.getElementById('messages');
+        const input = document.getElementById('input');
+        const sendBtn = document.getElementById('send');
 
-        // 发送消息给AI
-        function sendMessage() {
-            const input = document.getElementById('userInput').value.trim();
-            if (!input) return; // 空消息不发送
+        // 发送消息函数
+        function sendMessage(content) {
+            const userMessage = document.createElement('div');
+            userMessage.className = 'message user';
+            userMessage.textContent = content;
+            messagesContainer.appendChild(userMessage);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-            // 显示用户的消息
-            addMessage("user", input);
-            document.getElementById('userInput').value = ""; // 清空输入框
-
-            // 把用户消息加入历史
-            chatHistory.push({ role: "user", content: input });
-
-            // 调用后端接口，获取AI回答
-            fetch(backendUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ messages: chatHistory })
+            // 调用豆包API
+            fetch('https://open.doubao.com/openapi/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer fb5f572c-75ba-4009-a484-08241fd640b8'
+                },
+                body: JSON.stringify({
+                    model: 'doubao-pro',
+                    messages: [{ role: 'user', content: content }]
+                })
             })
             .then(response => response.json())
             .then(data => {
-                // 显示AI的回答
-                addMessage("assistant", data.content);
-                // 把AI回答加入历史
-                chatHistory.push({ role: "assistant", content: data.content });
+                const assistantMessage = document.createElement('div');
+                assistantMessage.className = 'message assistant';
+                assistantMessage.textContent = data.choices[0].message.content;
+                messagesContainer.appendChild(assistantMessage);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
             })
             .catch(error => {
-                addMessage("assistant", "抱歉，暂时无法回答~");
+                console.error('请求错误:', error);
+                const errorMessage = document.createElement('div');
+                errorMessage.className = 'message assistant';
+                errorMessage.style.color = 'red';
+                errorMessage.textContent = '请求失败，请稍后再试';
+                messagesContainer.appendChild(errorMessage);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
             });
         }
 
-        // 在页面上显示消息
-        function addMessage(role, content) {
-            const chatDiv = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${role}`;
-            messageDiv.textContent = content;
-            chatDiv.appendChild(messageDiv);
-            // 自动滚动到底部
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-        }
+        // 绑定发送事件
+        sendBtn.addEventListener('click', () => {
+            if (input.value.trim() !== '') {
+                sendMessage(input.value.trim());
+                input.value = '';
+            }
+        });
+
+        // 回车发送
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && input.value.trim() !== '') {
+                sendMessage(input.value.trim());
+                input.value = '';
+            }
+        });
     </script>
 </body>
 </html>
