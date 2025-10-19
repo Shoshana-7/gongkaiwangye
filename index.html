@@ -61,19 +61,27 @@
             background-color: #fafafa;
             border-bottom: 1px solid #eee;
         }
+        .process-list {
+            font-size: 12px;
+            color: #333;
+            margin-top: 5px;
+            padding-top: 5px;
+            border-top: 1px dashed #eee;
+        }
     </style>
 </head>
 <body>
     <div class="chat-container">
-        <!-- 提示用户输入格式 -->
         <div class="tip">
-            请按格式输入工序信息（输入“开始分析”触发计算）：<br>
-            格式示例：工序名,耗时(分钟),前置工序1,前置工序2（无前置工序则留空）<br>
-            例如：注塑灯座,5；焊接线路,8,注塑灯座；组装灯杆,6,注塑灯座
+            请逐条输入工序信息（每条工序单独发送），格式：<br>
+            工序名称,工序时间,前置工序1,前置工序2,...（无前置工序则留空，用中文逗号分隔）<br>
+            示例1（无前置）：注塑灯座,5,,<br>
+            示例2（有前置）：焊接线路,8,注塑灯座,<br>
+            所有工序输入完成后，发送“开始分析”即可。
         </div>
         <div class="chat-messages" id="messages"></div>
         <div class="chat-input">
-            <input type="text" id="input" placeholder="按格式输入工序，输入“开始分析”计算瓶颈...">
+            <input type="text" id="input" placeholder="按格式输入单条工序，完成后发送“开始分析”...">
             <button id="send">发送</button>
         </div>
     </div>
@@ -82,11 +90,29 @@
         const messagesContainer = document.getElementById('messages');
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('send');
-        // 存储用户输入的工序数据
-        let processes = {};
+        let processes = {}; // 存储所有工序：{名称: [时间, [前置工序1, 前置工序2...]]}
 
-        // ---------------------- 核心：瓶颈工序分析算法 ----------------------
-        // 检查循环依赖
+        // 显示消息
+        function showMessage(content, isUser = false) {
+            const message = document.createElement('div');
+            message.className = `message ${isUser ? 'user' : 'assistant'}`;
+            message.innerHTML = content.replace(/\n/g, '<br>');
+            messagesContainer.appendChild(message);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // 显示已添加的工序列表（辅助用户确认）
+        function showProcessList() {
+            if (Object.keys(processes).length === 0) return '';
+            let list = '<div class="process-list">已添加工序：<br>';
+            Object.entries(processes).forEach(([name, [time, pres]]) => {
+                list += `- ${name}（耗时${time}分钟，前置：${pres.length > 0 ? pres.join('、') : '无'}）<br>`;
+            });
+            list += '</div>';
+            return list;
+        }
+
+        // ---------------------- 核心算法 ----------------------
         function checkCircularDependency(processes) {
             const visited = new Set();
             const recStack = new Set();
@@ -110,9 +136,7 @@
             return false;
         }
 
-        // 查找瓶颈工序
         function findBottleneck(processes) {
-            // 1. 拓扑排序
             const sortedProcesses = [];
             const visited = new Set();
 
@@ -130,9 +154,8 @@
                 dfs(process);
             }
 
-            // 2. 计算最早开始/完成时间
-            const es = {}; // 最早开始时间
-            const ef = {}; // 最早完成时间
+            const es = {};
+            const ef = {};
             Object.keys(processes).forEach(p => es[p] = 0);
 
             for (const p of sortedProcesses) {
@@ -145,18 +168,14 @@
                 }
             }
 
-            // 3. 计算最晚完成/开始时间
             const totalTime = Math.max(...Object.values(ef));
-            const lf = {}; // 最晚完成时间
-            const ls = {}; // 最晚开始时间
+            const lf = {};
+            const ls = {};
             Object.keys(processes).forEach(p => lf[p] = totalTime);
 
             for (const p of sortedProcesses.reverse()) {
                 const [duration, _] = processes[p];
-                // 找后序工序
-                const successors = Object.keys(processes).filter(
-                    s => processes[s][1].includes(p)
-                );
+                const successors = Object.keys(processes).filter(s => processes[s][1].includes(p));
 
                 if (successors.length === 0) {
                     ls[p] = lf[p] - duration;
@@ -166,11 +185,9 @@
                 }
             }
 
-            // 4. 确定关键路径和瓶颈
             const criticalPath = Object.keys(processes).filter(p => es[p] === ls[p]);
             if (criticalPath.length === 0) return null;
 
-            // 关键路径中耗时最长的工序
             const bottleneck = criticalPath.reduce((maxP, p) => {
                 return processes[p][0] > processes[maxP][0] ? p : maxP;
             }, criticalPath[0]);
@@ -182,106 +199,105 @@
                 bottleneckTime: processes[bottleneck][0].toFixed(1)
             };
         }
-        // -------------------------------------------------------------------
+        // ------------------------------------------------------
 
-        // 发送消息函数
-        function sendMessage(content) {
-            // 1. 显示用户消息
-            const userMessage = document.createElement('div');
-            userMessage.className = 'message user';
-            userMessage.textContent = content;
-            messagesContainer.appendChild(userMessage);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        // 处理发送事件
+        function handleSend() {
+            const content = input.value.trim();
+            if (!content) return;
 
-            // 2. 处理用户输入（区分“添加工序”和“开始分析”）
-            let assistantReply = '';
-            if (content.trim() === '开始分析') {
-                // 触发分析逻辑
+            // 显示用户输入
+            showMessage(content, true);
+            input.value = '';
+
+            // 判断是否触发分析
+            if (content === '开始分析') {
                 if (Object.keys(processes).length === 0) {
-                    assistantReply = '还没有输入任何工序哦！请先按格式输入至少一个工序（例如：注塑灯座,5）。';
-                } else if (checkCircularDependency(processes)) {
-                    assistantReply = '发现工序存在循环依赖（比如A依赖B，B又依赖A），请修正工序关系后重新分析！';
-                } else {
-                    const result = findBottleneck(processes);
-                    if (result) {
-                        assistantReply = `
-                        🔍 瓶颈工序分析结果：
-                        1. 总生产时间：${result.totalTime} 分钟
-                        2. 关键路径（最长生产路径）：${result.criticalPath}
-                        3. 瓶颈工序：${result.bottleneck}
-                        4. 瓶颈耗时：${result.bottleneckTime} 分钟
-                        💡 建议：优先优化瓶颈工序（如增加设备/人员），可提升整体产能。
-                        `;
-                        // 分析后清空工序数据，方便重新输入
-                        processes = {};
-                    } else {
-                        assistantReply = '分析失败，请检查工序输入格式是否正确！';
-                    }
+                    showMessage('还没有添加任何工序哦～ 请先按格式输入工序。');
+                    return;
                 }
-            } else {
-                // 解析用户输入的工序（格式：工序名,耗时,前置1,前置2）
-                const parts = content.trim().split(',').map(item => item.trim());
-                if (parts.length < 2) {
-                    assistantReply = '输入格式不对哦！正确格式：工序名,耗时（例如：注塑灯座,5），有前置工序可加在后面（例如：焊接线路,8,注塑灯座）。';
-                } else {
-                    const processName = parts[0];
-                    const duration = parseFloat(parts[1]);
-                    const predecessors = parts.slice(2).filter(p => p); // 过滤空前置工序
 
-                    // 验证耗时是否为正数
-                    if (isNaN(duration) || duration <= 0) {
-                        assistantReply = `“${processName}”的耗时必须是正数，请重新输入！`;
-                    } else {
-                        // 验证前置工序是否已存在
-                        const invalidPre = predecessors.filter(p => !processes[p]);
-                        if (invalidPre.length > 0) {
-                            assistantReply = `“${processName}”的前置工序${invalidPre.join('、')}还没添加，请先添加这些工序！`;
-                        } else {
-                            // 保存工序
-                            processes[processName] = [duration, predecessors];
-                            assistantReply = `✅ 已添加工序：
-                            名称：${processName}
-                            耗时：${duration} 分钟
-                            前置工序：${predecessors.length > 0 ? predecessors.join('、') : '无'}
-                            （可继续添加其他工序，输入“开始分析”获取结果）`;
-                        }
-                    }
+                // 检查循环依赖
+                if (checkCircularDependency(processes)) {
+                    showMessage('检测到工序存在循环依赖（例如A依赖B，B又依赖A），请修改工序关系后重试。');
+                    return;
+                }
+
+                // 执行分析
+                const result = findBottleneck(processes);
+                if (result) {
+                    showMessage(`
+                    🔍 瓶颈工序分析结果：<br>
+                    1. 总生产时间：${result.totalTime} 分钟<br>
+                    2. 关键路径（最长生产路径）：${result.criticalPath}<br>
+                    3. 瓶颈工序：${result.bottleneck}<br>
+                    4. 瓶颈耗时：${result.bottleneckTime} 分钟<br>
+                    💡 建议：优先优化瓶颈工序以提升整体产能。
+                    `);
+                    // 分析后清空，方便重新输入
+                    processes = {};
+                } else {
+                    showMessage('分析失败，请检查工序输入是否正确。');
+                }
+                return;
+            }
+
+            // 处理单条工序输入（格式：名称,时间,前置1,前置2,...）
+            const parts = content.split(',').map(item => item.trim());
+            if (parts.length < 2) {
+                showMessage('格式错误！正确格式：工序名称,工序时间,前置工序1,前置工序2...（最少需要名称和时间，用中文逗号分隔）');
+                return;
+            }
+
+            const name = parts[0];
+            const time = parseFloat(parts[1]);
+            const predecessors = [];
+
+            // 提取前置工序（过滤空值）
+            for (let i = 2; i < parts.length; i++) {
+                if (parts[i]) { // 非空字符串才视为前置工序
+                    predecessors.push(parts[i]);
                 }
             }
 
-            // 3. 显示助手回复
-            setTimeout(() => { // 加一点延迟，模拟“思考”过程，更自然
-                const assistantMessage = document.createElement('div');
-                assistantMessage.className = 'message assistant';
-                // 替换换行符为<br>，让回复格式更清晰
-                assistantMessage.innerHTML = assistantReply.replace(/\n/g, '<br>');
-                messagesContainer.appendChild(assistantMessage);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }, 300);
+            // 验证工序名称
+            if (!name) {
+                showMessage('工序名称不能为空，请重新输入。');
+                return;
+            }
+
+            // 验证时间
+            if (isNaN(time) || time <= 0) {
+                showMessage(`“${name}”的时间必须是正数，请重新输入。`);
+                return;
+            }
+
+            // 验证前置工序是否存在
+            const invalidPres = predecessors.filter(p => !processes[p]);
+            if (invalidPres.length > 0) {
+                showMessage(`“${name}”的前置工序${invalidPres.join('、')}尚未添加，请先添加这些工序。`);
+                return;
+            }
+
+            // 保存工序
+            processes[name] = [time, predecessors];
+            showMessage(`✅ 已添加工序：<br>
+            名称：${name}<br>
+            时间：${time} 分钟<br>
+            前置工序：${predecessors.length > 0 ? predecessors.join('、') : '无'}<br>
+            ${showProcessList()}<br>
+            可继续添加其他工序，完成后发送“开始分析”。`);
         }
 
-        // 绑定发送事件
-        sendBtn.addEventListener('click', () => {
-            if (input.value.trim() !== '') {
-                sendMessage(input.value.trim());
-                input.value = '';
-            }
-        });
-
-        // 回车发送
+        // 绑定事件
+        sendBtn.addEventListener('click', handleSend);
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && input.value.trim() !== '') {
-                sendMessage(input.value.trim());
-                input.value = '';
-            }
+            if (e.key === 'Enter') handleSend();
         });
 
-        // 页面加载时发送欢迎消息
+        // 初始化欢迎消息
         window.onload = () => {
-            const welcomeMsg = document.createElement('div');
-            welcomeMsg.className = 'message assistant';
-            welcomeMsg.innerHTML = '你好！我可以帮你分析台灯生产的瓶颈工序～<br>请按提示格式输入工序，全部输入后敲“开始分析”即可。';
-            messagesContainer.appendChild(welcomeMsg);
+            showMessage('你好！请逐条输入生产工序，每条工序格式为：<br>工序名称,工序时间,前置工序1,前置工序2...<br>（无前置工序可留空，例如“注塑灯座,5,,,”）<br>所有工序输入完成后，发送“开始分析”即可得到结果。');
         };
     </script>
 </body>
